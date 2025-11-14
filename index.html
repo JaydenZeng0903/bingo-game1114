@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多主題 Bingo (勝利目標修正版)</title>
+    <!-- 載入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 載入 Inter 字體 -->
+    <style>
+        @import url('https://fonts.com/css2?family=Inter:wght@100..900&family=Noto+Sans+TC:wght@300;500;700&display=swap');
+        body {
+            /* 使用 Noto Sans TC 確保中文顯示優良 */
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            background-color: #f0f4f8; /* 淺藍色背景，視覺更舒適 */
+            min-height: 100vh;
+        }
+        /* 調整為 4x4 網格 */
+        .bingo-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(4, 1fr);
+            aspect-ratio: 1 / 1; /* 保持正方形 */
+        }
+        .grid-cell {
+            border: 1px solid #cbd5e1; /* 邊框更柔和 */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 8px; /* 增加內邊距 */
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            line-height: 1.4;
+            font-size: 0.875rem; /* 預設 text-sm */
+            overflow: hidden; 
+            min-height: 80px; /* 增加最小高度 */
+            background-color: white;
+            color: #334155; /* 深灰藍色 */
+            font-weight: 500;
+        }
+        @media (min-width: 640px) {
+            .grid-cell {
+                font-size: 1rem; /* sm:text-base */
+                padding: 12px;
+            }
+        }
+        .marked {
+            background-color: #1d4ed8 !important; /* 深藍色 */
+            color: white !important;
+            transform: scale(1.05);
+            box-shadow: 0 4px 10px rgba(29, 78, 216, 0.4);
+        }
+        .winning {
+            background-color: #10b981 !important;
+            animation: pulse-green 1s infinite alternate;
+        }
+        @keyframes pulse-green {
+            from { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            to { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+        }
+        
+        /* Selection UI - 調整為更像按鈕 */
+        .selection-item {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            min-height: 50px; /* 增加點擊區域 */
+            font-weight: 600;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            font-size: 0.875rem; /* 保持 text-sm */
+        }
+        .custom-item {
+            background-color: #fcd34d !important; /* 鮮豔黃色 */
+            color: #92400e !important;
+            border-color: #fbbd24 !important;
+        }
+        .custom-selected {
+            background-color: #d97706 !important; /* 深橘色 */
+            color: white !important;
+            border-color: #d97706 !important;
+        }
+        .selected {
+            background-color: #3b82f6 !important;
+            color: white !important;
+            border-color: #3b82f6 !important;
+        }
+        
+        /* Modal Styles - 確保手機體驗 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none; 
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            padding: 20px; /* 增加邊距防止貼邊 */
+        }
+        .modal-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 90%;
+            width: 400px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            animation: fadeIn 0.3s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        
+        /* 禁用選單樣式 */
+        select:disabled {
+            background-color: #e2e8f0; /* 淺灰色背景 */
+            color: #64748b; /* 深灰色字體 */
+            cursor: not-allowed;
+            border-color: #94a3b8;
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8">
+
+    <div id="app" class="max-w-xl mx-auto bg-white rounded-2xl shadow-2xl p-6 sm:p-8 border border-gray-100">
+        
+        <h1 id="theme-title" class="text-3xl font-extrabold text-center text-blue-700 mb-2">
+            Bingo 遊戲
+        </h1>
+        <p class="text-center text-gray-500 mb-6 text-sm">
+            點擊格子即可標記/取消標記。
+        </p>
+
+        <!-- 主題與線數選擇區塊 (響應式 Flex) -->
+        <div class="space-y-3 mb-6">
+            <div class="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
+                <!-- 主題選擇 -->
+                <div class="flex-1">
+                    <label for="theme-selector" class="block text-sm font-medium text-gray-700 mb-1">
+                        主題：
+                    </label>
+                    <select id="theme-selector" onchange="changeTheme(this.value)" class="w-full p-2 border border-gray-300 rounded-lg shadow-md focus:ring-blue-500 focus:border-blue-500 transition">
+                        <!-- Options will be added by JS -->
+                    </select>
+                </div>
+                
+                <!-- 勝利線數選擇 -->
+                <div class="flex-none w-full sm:w-auto">
+                    <label for="lines-needed-selector" class="block text-sm font-medium text-gray-700 mb-1">
+                        勝利目標：
+                    </label>
+                    <select id="lines-needed-selector" onchange="handleLinesNeededChange(this.value)" class="w-full p-2 border border-blue-400 rounded-lg shadow-md focus:ring-blue-500 focus:border-blue-500 bg-blue-50 transition">
+                        <!-- Options 1 to 10 will be generated by JS -->
+                    </select>
+                </div>
+            </div>
+            <!-- 
+              修正：移除 inline onclick="quickStartGame()"
+              事件將由 JavaScript 在 initApp 中綁定 
+            -->
+            <button id="quick-start-button" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-150 transform hover:scale-[1.03] mt-4 disabled:bg-purple-300 disabled:shadow-none">
+                🚀 快速開始 (系統隨機 4x4)
+            </button>
+        </div>
+        
+        <!-- 訊息區塊 -->
+        <div id="message-box" class="p-4 mb-6 rounded-xl border-l-4 hidden" role="alert">
+            <p id="message-text" class="font-medium text-sm sm:text-base"></p>
+        </div>
+        
+        <!-- 30 選 16 選擇介面 -->
+        <div id="selection-area" class="space-y-4 hidden">
+            <h2 class="text-xl font-bold text-gray-700 border-b pb-2">🎯 選擇您的 16 個格子內容</h2>
+            <!-- 
+              修正：新增 ID "selection-prompt-text" 並移除硬編碼的 "31" 
+              內容將由 renderSelectionUI() 動態填入
+            -->
+            <p id="selection-prompt-text" class="text-sm text-gray-500">
+                <!-- JS will populate this text -->
+            </p>
+            <!-- 選擇池：手機 3 欄，平板/桌面 4-5 欄 -->
+            <div id="selection-pool" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 p-4 bg-gray-100 rounded-xl border border-gray-200">
+                <!-- Selectable items go here -->
+            </div>
+            
+            <!-- 底部狀態與按鈕 -->
+            <div class="flex flex-col space-y-3 justify-between items-center pt-4 border-t mt-4">
+                <p class="text-xl font-bold text-blue-600">已選擇：<span id="selected-count">0</span> / 16</p>
+                <button id="start-game-button" onclick="finalizeGrid()" class="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-150 transform hover:scale-[1.03] disabled:bg-green-300 disabled:shadow-none">
+                    開始遊戲 (確定 4x4 表格)
+                </button>
+            </div>
+        </div>
+
+        <!-- 遊戲區 -->
+        <div id="game-area" class="space-y-6 hidden">
+            
+            <!-- 狀態顯示區塊 -->
+            <div id="current-player-status" class="text-center text-lg font-bold text-blue-800 bg-blue-100 p-3 rounded-xl shadow-inner">
+                當前狀態：已標記 <span id="mark-count" class="text-2xl font-extrabold text-blue-600">0</span> 格
+            </div>
+
+            <!-- Bingo 卡片網格 (現在是 4x4) -->
+            <div id="bingo-grid-container" class="bingo-grid w-full bg-white rounded-xl overflow-hidden shadow-2xl border-4 border-blue-500">
+                <!-- 4x4 Grid Cells will be inserted here by JavaScript -->
+            </div>
+            
+            <button onclick="showResetConfirmation()" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-150 transform hover:scale-[1.01] mt-4">
+                🗑️ 重設遊戲 (清除表格與進度)
+            </button>
+        </div>
+    </div>
+    
+    <!-- 重設確認視窗 (Custom Modal) -->
+    <div id="reset-modal" class="modal-overlay">
+        <div class="modal-content text-center">
+            <h3 class="text-2xl font-bold text-red-600 mb-4">⚠️ 確認重設遊戲</h3>
+            <p class="text-gray-700 mb-6">
+                您確定要重設遊戲嗎？這將會<strong class="text-red-600 font-bold">清除您儲存在瀏覽器中的所有進度。</strong>
+            </p>
+            <div class="flex justify-center space-x-4">
+                <button onclick="hideResetConfirmation()" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-full transition duration-150 shadow-md">
+                    取消
+                </button>
+                <button onclick="executeResetGame()" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-150">
+                    確定重設
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 自訂內容輸入視窗 (Custom Modal) -->
+    <div id="custom-content-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 class="text-2xl font-bold text-blue-600 mb-4">✏️ 輸入自訂格子內容</h3>
+            <p class="text-gray-700 mb-4">請為您選擇的自訂項目輸入內容 (例如: 曾在機場約會)</p>
+            <input type="text" id="custom-content-input" maxlength="15" placeholder="輸入內容 (限 15 字)" class="w-full p-3 border border-gray-300 rounded-lg mb-6 shadow-inner focus:ring-blue-500 focus:border-blue-500" />
+            <div class="flex justify-end space-x-4">
+                <button onclick="cancelCustomContent()" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-full transition duration-150">
+                    取消
+                </button>
+                <button onclick="confirmCustomContent()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-150">
+                    確定
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 靜態數據：所有主題定義 ---
+        const THEMES = {
+            'couple': {
+                title: "夫妻版 - 破冰遊戲 (日常情境)",
+                // 擴充到 30 個選項
+                items: [
+                    "每晚睡前會互道晚安", "知道對方手機電量低於多少會焦慮", "曾為了「誰洗碗」玩猜拳決定", "至少為對方買過五次外賣/外送", "在對方生病時照顧過對方",
+                    "一起組裝過 IKEA 或大型家具", "曾因冷氣溫度開太低爭執", "睡覺時被對方搶走棉被", "在家穿著對方的舊衣服", "知道對方最愛吃的宵夜是什麼",
+                    "早上起來發現對方把牙膏擠完了", "曾在公共場合給過對方「眼神警告」", "爭吵後隔天早上會主動和好", "兩人都有戴眼鏡或隱形眼鏡", "曾經幫對方修剪過頭髮",
+                    "輪流倒垃圾超過半年", "互相知道對方的「尷尬往事」", "曾為了影集或電影的結局吵架", "保留著對方寫給自己的第一張卡片", "曾在對方手機裡存了搞笑照片",
+                    "曾因規劃旅遊行程意見不合", "共同完成過一次大掃除", "婚後仍堅持各用各的錢包/帳戶", "曾一起在深夜趕報告/工作", "曾經在三個月內搬過家",
+                    // 新增 5 個更生活化的選項
+                    "曾因為叫錯對方的名字而被瞪", "至少一次在對方睡著後偷拍過照片", "為了要不要養寵物討論超過一個月", "偷偷把對方不喜歡吃的食材從餐盤上夾走", "曾連續三天晚上一起看同一部電影/劇集"
+                    ,
+                    // <-- 新增的 10 個項目 -->
+                    "曾一起看日出或日落",
+                    "手機裡有對方的專屬暱稱",
+                    "吵架時，對方會先去泡一杯飲料",
+                    "一起去逛過夜市，並分享同一份小吃",
+                    "知道對方銀行卡密碼（或其中一張）",
+                    "曾一起淋過雨",
+                    "家裡有不成文的「暗號」或「術語」",
+                    "曾幫對方拔過白頭髮或擠痘痘",
+                    "兩人有共同的儲蓄目標",
+                    "至少穿過一次情侶裝（或類似衣物）"
+                    // <-- 新增項目結束 -->
+                ]
+            },
+            'bible': {
+                title: "聖經人物版 - 破冰遊戲",
+                items: [
+                    "挪亞", "亞伯拉罕", "摩西", "約書亞", "大衛",
+                    "所羅門", "以賽亞", "耶利米", "但以理", "約拿",
+                    "施洗約翰", "彼得", "保羅", "提摩太", "馬利亞 (耶穌之母)",
+                    "馬大", "路得", "以斯帖", "雅各", "以撒",
+                    "參孫", "撒母耳", "以利亞", "約伯", "多馬",
+                    // 為了達到 30 選 16 的目標，需要補足選項
+                    "該隱", "亞伯", "約瑟", "底波拉", "基甸"
+                ]
+            }
+        };
+        
+        // Global constant for all 4x4 winning combinations (10 in total)
+        const WIN_COMBINATIONS_4X4 = [
+            // 橫線 (Rows)
+            [0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15],
+            // 直線 (Columns)
+            [0, 4, 8, 12], [1, 5, 9, 13], [2, 6, 10, 14], [3, 7, 11, 15],
+            // 對角線 (Diagonals)
+            [0, 5, 10, 15], [3, 6, 9, 12]
+        ];
+
+        // --- 常數和預設值 ---
+        const LOCAL_ACTIVE_THEME_KEY = 'local_active_theme';
+        const LOCAL_SQUARES_KEY = 'local_player_squares_indices_'; 
+        const LOCAL_MARKS_KEY = 'local_player_marks_'; 
+        const LOCAL_CUSTOM_CONTENT_KEY = 'local_custom_content_'; 
+        const LOCAL_LINES_NEEDED_KEY = 'local_lines_needed_'; 
+        const CUSTOM_ITEM_PLACEHOLDER = 'CUSTOM_ITEM_SLOT'; 
+        
+        // --- 核心狀態 ---
+        let activeTheme = loadState(LOCAL_ACTIVE_THEME_KEY) || 'couple';
+        let playerSquaresIndices = null; 
+        let marks = []; 
+        let customContent = ''; 
+        let tempSelections = []; 
+        let bingoLinesNeeded = 1; 
+        
+        // UI 元素
+        const themeSelector = document.getElementById('theme-selector');
+        const themeTitle = document.getElementById('theme-title');
+        const selectionAreaDiv = document.getElementById('selection-area');
+        const gameAreaDiv = document.getElementById('game-area');
+        const selectionPoolDiv = document.getElementById('selection-pool');
+        const selectedCountSpan = document.getElementById('selected-count');
+        const startGameButton = document.getElementById('start-game-button');
+        const bingoGridContainer = document.getElementById('bingo-grid-container');
+        const markCountDisplay = document.getElementById('mark-count');
+        const messageBox = document.getElementById('message-box');
+        const messageText = document.getElementById('message-text');
+        const customContentModal = document.getElementById('custom-content-modal');
+        const customContentInput = document.getElementById('custom-content-input');
+        const resetModal = document.getElementById('reset-modal');
+        const linesNeededSelector = document.getElementById('lines-needed-selector');
+        const quickStartButton = document.getElementById('quick-start-button'); // <-- 新增
+
+        
+        // --- 輔助/儲存函式 ---
+
+        function loadState(key) {
+            try {
+                const json = localStorage.getItem(key);
+                return json ? JSON.parse(json) : null;
+            } catch (e) {
+                console.error(`Error loading state for key ${key}:`, e);
+                return null;
+            }
+        }
+
+        function saveState(key, data) {
+            try {
+                localStorage.setItem(key, JSON.stringify(data));
+            } catch (e) {
+                console.error(`Error saving state for key ${key}:`, e);
+            }
+        }
+
+        function showMessage(text, type = 'warning') {
+            messageText.textContent = text;
+            messageBox.className = 'p-4 mb-6 rounded-xl border-l-4';
+            messageBox.classList.remove('hidden', 'bg-red-100', 'border-red-500', 'text-red-700', 'bg-green-100', 'border-green-500', 'text-green-700', 'bg-yellow-100', 'border-yellow-500', 'text-yellow-700');
+            
+            if (type === 'error') {
+                messageBox.classList.add('bg-red-100', 'border-red-500', 'text-red-700');
+            } else if (type === 'success') {
+                messageBox.classList.add('bg-green-100', 'border-green-500', 'text-green-700');
+            } else {
+                messageBox.classList.add('bg-yellow-100', 'border-yellow-500', 'text-yellow-700');
+            }
+            messageBox.classList.remove('hidden');
+        }
+
+        // --- 鎖定/解鎖控制項的函式 ---
+        function disableSelectors() {
+            themeSelector.disabled = true;
+            linesNeededSelector.disabled = true;
+            if (quickStartButton) quickStartButton.disabled = true; // <-- 新增
+        }
+
+        function enableSelectors() {
+            themeSelector.disabled = false;
+            linesNeededSelector.disabled = false;
+            if (quickStartButton) quickStartButton.disabled = false; // <-- 新增
+        }
+        
+        // --- 主題切換邏輯 ---
+        
+        function loadCurrentThemeState() {
+            playerSquaresIndices = loadState(LOCAL_SQUARES_KEY + activeTheme) || null;
+            marks = loadState(LOCAL_MARKS_KEY + activeTheme) || [];
+            customContent = loadState(LOCAL_CUSTOM_CONTENT_KEY + activeTheme) || '';
+            // 載入勝利線數，如果沒有則預設為 1
+            bingoLinesNeeded = loadState(LOCAL_LINES_NEEDED_KEY + activeTheme) || 1; 
+            tempSelections = playerSquaresIndices || [];
+        }
+        
+        function saveCurrentThemeState() {
+            saveState(LOCAL_ACTIVE_THEME_KEY, activeTheme);
+            saveState(LOCAL_SQUARES_KEY + activeTheme, playerSquaresIndices);
+            saveState(LOCAL_MARKS_KEY + activeTheme, marks);
+            saveState(LOCAL_CUSTOM_CONTENT_KEY + activeTheme, customContent);
+            saveState(LOCAL_LINES_NEEDED_KEY + activeTheme, bingoLinesNeeded); 
+        }
+
+        window.changeTheme = function(newTheme) {
+            if (themeSelector.disabled) {
+                showMessage('遊戲已開始，無法變更主題。請重設遊戲後再修改。', 'error');
+                themeSelector.value = activeTheme; // Revert selection
+                return;
+            }
+
+            if (newTheme === activeTheme) return;
+            activeTheme = newTheme;
+            saveState(LOCAL_ACTIVE_THEME_KEY, newTheme);
+            
+            loadCurrentThemeState();
+            
+            showMessage(`主題已切換到「${THEMES[activeTheme].title}」。`, 'success');
+            
+            initApp(); 
+        }
+
+        function shuffleArray(array) {
+            let arr = [...array];
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+
+        function checkWin(currentMarks) {
+            const markedIndices = new Set(currentMarks);
+            let completedCombos = [];
+            let winningIndices = new Set();
+
+            for (const combo of WIN_COMBINATIONS_4X4) {
+                if (combo.every(index => markedIndices.has(index))) {
+                    completedCombos.push(combo);
+                    combo.forEach(index => winningIndices.add(index));
+                }
+            }
+            
+            return {
+                count: completedCombos.length,
+                winningIndices: Array.from(winningIndices),
+                isBingo: completedCombos.length > 0
+            };
+        }
+
+        window.handleLinesNeededChange = function(value) {
+            if (linesNeededSelector.disabled) {
+                showMessage('遊戲已開始，無法變更勝利目標。請重設遊戲後再修改。', 'error');
+                linesNeededSelector.value = bingoLinesNeeded; // Revert selection
+                return;
+            }
+            
+            const newLines = parseInt(value, 10);
+            if (newLines >= 1 && newLines <= 10) {
+                bingoLinesNeeded = newLines;
+                saveCurrentThemeState();
+                showMessage(`獲勝目標已設定為完成 ${bingoLinesNeeded} 條線！`, 'warning');
+            }
+        }
+        
+        /**
+         * 渲染勝利目標下拉選單 (1到10條線)
+         */
+        function renderLinesNeededSelector() {
+            linesNeededSelector.innerHTML = '';
+            for (let i = 1; i <= 10; i++) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = `${i} 條線 (${i === 10 ? '全滿' : ''})`;
+                linesNeededSelector.appendChild(option);
+            }
+            // 確保選單的值與當前狀態同步
+            linesNeededSelector.value = bingoLinesNeeded;
+        }
+
+
+        // --- 遊戲邏輯與 UI 渲染 ---
+
+        function renderBingoGrid() {
+            const BINGO_ITEMS = THEMES[activeTheme].items;
+            
+            if (!playerSquaresIndices || playerSquaresIndices.length !== 16) {
+                renderSelectionUI();
+                return;
+            }
+
+            // 遊戲開始後，鎖定選擇器
+            disableSelectors();
+
+            // 遊戲中也要確保目標顯示正確
+            renderLinesNeededSelector();
+
+            selectionAreaDiv.classList.add('hidden');
+            gameAreaDiv.classList.remove('hidden');
+
+            const winResult = checkWin(marks);
+            const completedLinesCount = winResult.count;
+            
+            const isGameWon = completedLinesCount >= bingoLinesNeeded; 
+            
+            if (isGameWon) {
+                showMessage(`🎉 恭喜您！已完成 ${completedLinesCount} 條線，達成 ${bingoLinesNeeded} 條線的勝利目標！`, 'success');
+            } else if (completedLinesCount > 0) {
+                showMessage(`已完成 ${completedLinesCount} 條線。還需要 ${bingoLinesNeeded - completedLinesCount} 條線才能獲勝！`, 'warning');
+            } else {
+                messageBox.classList.add('hidden');
+            }
+            
+            bingoGridContainer.innerHTML = '';
+            const winningIndices = new Set(winResult.winningIndices);
+
+            playerSquaresIndices.forEach((poolId, index) => {
+                let itemText;
+                const isCustom = poolId === CUSTOM_ITEM_PLACEHOLDER;
+                if (isCustom) {
+                    itemText = customContent || '[自訂內容未設定]'; 
+                } else {
+                    itemText = BINGO_ITEMS[poolId];
+                }
+
+                const isMarked = marks.includes(index);
+                const isWinningCell = winningIndices.has(index); 
+                
+                const cell = document.createElement('div');
+                cell.className = `grid-cell rounded-lg transition duration-100 ${isMarked ? 'marked' : 'bg-white hover:bg-blue-50'} ${isWinningCell && isGameWon ? 'winning' : ''} ${isCustom ? 'border-dashed border-2 border-orange-400' : ''}`;
+                cell.textContent = itemText;
+                cell.dataset.index = index;
+                cell.onclick = () => handleCellClick(index);
+                
+                bingoGridContainer.appendChild(cell);
+            });
+            
+            markCountDisplay.textContent = marks.length;
+        }
+        
+        window.handleCellClick = function(index) {
+            const BINGO_ITEMS = THEMES[activeTheme].items;
+            const markIndex = marks.indexOf(index); 
+            
+            let itemText;
+            const poolId = playerSquaresIndices[index];
+            if (poolId === CUSTOM_ITEM_PLACEHOLDER) {
+                itemText = customContent || '[自訂內容]';
+            } else {
+                itemText = BINGO_ITEMS[poolId] || '[未知項目]';
+            }
+
+            if (markIndex === -1) {
+                marks.push(index);
+                showMessage(`您標記了 "${itemText}"。`, 'success');
+            } else {
+                marks.splice(markIndex, 1);
+                showMessage(`您取消了 "${itemText}" 的標記。`, 'warning');
+            }
+            
+            saveCurrentThemeState();
+            renderBingoGrid(); 
+        }
+
+
+        function renderSelectionUI() {
+            const BINGO_ITEMS = THEMES[activeTheme].items;
+            const totalPoolSize = BINGO_ITEMS.length + 1; // +1 for custom
+            
+            // --- 修正：動態更新選擇提示文字 ---
+            const promptTextElement = document.getElementById('selection-prompt-text');
+            if (promptTextElement) {
+                promptTextElement.innerHTML = `請從下方 <strong>${totalPoolSize}</strong> 個項目中，點擊選擇 <strong>16</strong> 個項目來組成您個人的 <strong>4x4</strong> Bingo 表格。`;
+            }
+            // --- 修正結束 ---
+            
+            // 遊戲未開始，啟用選擇器
+            enableSelectors();
+
+            gameAreaDiv.classList.add('hidden');
+            selectionAreaDiv.classList.remove('hidden');
+            selectionPoolDiv.innerHTML = '';
+            messageBox.classList.add('hidden'); 
+            
+            const fullPool = [...BINGO_ITEMS.map((item, index) => ({ item, id: index })), 
+                             { item: '[自訂一項]', id: CUSTOM_ITEM_PLACEHOLDER, isCustom: true }];
+            
+            fullPool.forEach(({ item, id, isCustom }) => {
+                const isSelected = tempSelections.includes(id);
+
+                const itemDiv = document.createElement('div');
+                itemDiv.className = `p-2 border rounded-lg text-xs cursor-pointer transition duration-100 selection-item ${
+                    isCustom ? 'custom-item' : 'bg-white hover:bg-yellow-100 border-gray-300'
+                } ${
+                    isSelected ? (isCustom ? 'custom-selected' : 'selected') : ''
+                }`;
+                itemDiv.textContent = item;
+                itemDiv.dataset.poolId = id;
+                itemDiv.onclick = () => handleSelectionClick(id, isCustom);
+                selectionPoolDiv.appendChild(itemDiv);
+            });
+            
+            if (tempSelections.includes(CUSTOM_ITEM_PLACEHOLDER) && customContent) {
+                const customItemElement = selectionPoolDiv.querySelector(`[data-pool-id="${CUSTOM_ITEM_PLACEHOLDER}"]`);
+                if (customItemElement) {
+                     customItemElement.textContent = `[自訂一項] - "${customContent}"`;
+                }
+            } else if (tempSelections.includes(CUSTOM_ITEM_PLACEHOLDER) && !customContent) {
+                 showMessage('請點擊「[自訂一項]」按鈕輸入您的自訂內容！', 'error');
+            }
+            
+            updateSelectionCountAndButton();
+        }
+
+        function updateSelectionCountAndButton() {
+            selectedCountSpan.textContent = tempSelections.length;
+            const isCustomSelected = tempSelections.includes(CUSTOM_ITEM_PLACEHOLDER);
+            
+            const canStart = tempSelections.length === 16 && (!isCustomSelected || (isCustomSelected && customContent.trim()));
+            startGameButton.disabled = !canStart;
+            
+            if (tempSelections.length > 16) {
+                 showMessage('選擇項目超過 16 個，請取消選擇。', 'error');
+            } else if (tempSelections.length === 16 && isCustomSelected && !customContent.trim()) {
+                 showMessage('請先輸入並確定您的自訂內容！', 'warning');
+            } else {
+                // Keep other messages if they are currently showing, otherwise hide.
+                if (!canStart && tempSelections.length < 16) {
+                    messageBox.classList.add('hidden'); 
+                }
+            }
+        }
+        
+        window.handleSelectionClick = function(id, isCustom) {
+            const indexInArray = tempSelections.indexOf(id);
+
+            if (indexInArray === -1) {
+                if (tempSelections.length < 16) {
+                    tempSelections.push(id);
+                    if (isCustom) {
+                        customContentInput.value = customContent; 
+                        customContentModal.style.display = 'flex';
+                    }
+                } else {
+                    showMessage('您已經選擇了 16 個項目。請取消一個項目後再選擇。', 'warning');
+                }
+            } else {
+                tempSelections.splice(indexInArray, 1);
+                if (isCustom) {
+                    customContent = ''; 
+                    saveCurrentThemeState(); 
+                }
+            }
+            
+            renderSelectionUI(); 
+        }
+        
+        window.confirmCustomContent = function() {
+            const content = customContentInput.value.trim();
+            if (content.length < 2) {
+                showMessage('自訂內容至少需要 2 個字。', 'error');
+                return;
+            }
+            customContent = content;
+            saveCurrentThemeState();
+            customContentModal.style.display = 'none';
+            showMessage(`自訂內容："${customContent}" 已儲存。請繼續完成 16 個項目的選擇。`, 'success');
+            
+            renderSelectionUI(); 
+        }
+
+        window.cancelCustomContent = function() {
+            customContentModal.style.display = 'none';
+            const indexInArray = tempSelections.indexOf(CUSTOM_ITEM_PLACEHOLDER);
+            if (indexInArray !== -1) {
+                tempSelections.splice(indexInArray, 1);
+                customContent = '';
+                saveCurrentThemeState();
+                renderSelectionUI(); 
+                showMessage('已取消自訂項目。', 'warning');
+            }
+        }
+
+        window.finalizeGrid = function() {
+            if (tempSelections.length !== 16) {
+                showMessage('請確切選擇 16 個項目！', 'error');
+                return;
+            }
+            
+            const isCustomSelected = tempSelections.includes(CUSTOM_ITEM_PLACEHOLDER);
+            if (isCustomSelected && !customContent.trim()) {
+                 showMessage('請先輸入並確定您的自訂內容。', 'error');
+                 return;
+            }
+
+            playerSquaresIndices = shuffleArray(tempSelections);
+
+            saveCurrentThemeState();
+            
+            marks = [];
+            saveCurrentThemeState();
+            
+            // 遊戲開始，鎖定選擇器
+            disableSelectors();
+
+            showMessage('您的 4x4 Bingo 表格已建立！開始遊戲吧！', 'success');
+            renderBingoGrid();
+        }
+        
+        window.showResetConfirmation = function() {
+            resetModal.style.display = 'flex';
+        }
+
+        window.hideResetConfirmation = function() {
+            resetModal.style.display = 'none';
+        }
+
+        window.executeResetGame = function() {
+            hideResetConfirmation(); 
+            localStorage.removeItem(LOCAL_SQUARES_KEY + activeTheme);
+            localStorage.removeItem(LOCAL_MARKS_KEY + activeTheme);
+            localStorage.removeItem(LOCAL_CUSTOM_CONTENT_KEY + activeTheme);
+            localStorage.removeItem(LOCAL_LINES_NEEDED_KEY + activeTheme); 
+            
+            playerSquaresIndices = null;
+            marks = [];
+            customContent = '';
+            tempSelections = [];
+            bingoLinesNeeded = 1; 
+
+            // 重設後，啟用選擇器
+            enableSelectors();
+
+            showMessage(`「${THEMES[activeTheme].title}」遊戲已成功重設。請重新選擇您的 16 個格子內容。`, 'success');
+            renderSelectionUI(); 
+            // 確保重設後目標選擇器也能立即更新
+            renderLinesNeededSelector();
+        }
+
+        // --- 新增：快速開始遊戲 ---
+        // 修正：移除 window. ，使其成為腳本內的函式
+        function quickStartGame() {
+            const currentThemeItems = THEMES[activeTheme].items;
+            
+            // 檢查項目是否足夠
+            if (currentThemeItems.length < 16) {
+                showMessage(`主題「${THEMES[activeTheme].title}」的項目少於 16 個，無法快速開始。`, 'error');
+                return;
+            }
+
+            // 建立所有可用項目的索引列表 (0 到 length-1)
+            // 這樣做會自動忽略「自訂」選項，因為它不在 items 陣列中
+            const itemIndices = Array.from({ length: currentThemeItems.length }, (_, i) => i);
+
+            // 洗牌索引
+            const shuffledIndices = shuffleArray(itemIndices);
+
+            // 選取前 16 個作為格子內容
+            playerSquaresIndices = shuffledIndices.slice(0, 16);
+
+            // 重設標記
+            marks = [];
+            
+            // 儲存狀態 (儲存新的 playerSquaresIndices 和空的 marks)
+            saveCurrentThemeState(); 
+
+            // 鎖定選擇器
+            disableSelectors();
+
+            showMessage('🚀 快速遊戲已開始！系統已為您隨機產生 4x4 表格。', 'success');
+
+            // 渲染遊戲表格
+            renderBingoGrid();
+        }
+
+        function setupThemeSelector() {
+            themeSelector.innerHTML = '';
+            for (const id in THEMES) {
+                const theme = THEMES[id];
+                const option = document.createElement('option');
+                option.value = id;
+                option.textContent = theme.title;
+                themeSelector.appendChild(option);
+            }
+            themeSelector.value = activeTheme;
+            themeTitle.textContent = THEMES[activeTheme].title;
+        }
+        
+        /**
+         * 應用程式初始化函式
+         */
+        function initApp() {
+            setupThemeSelector(); 
+            loadCurrentThemeState(); 
+            
+            // <-- 修正處: 確保在檢查遊戲狀態前，勝利目標下拉選單已 populated -->
+            renderLinesNeededSelector();
+            
+            themeTitle.textContent = THEMES[activeTheme].title; 
+
+            if (playerSquaresIndices && playerSquaresIndices.length === 16) {
+                renderBingoGrid(); // 會在內部呼叫 disableSelectors()
+            } else {
+                renderSelectionUI(); // 會在內部呼叫 enableSelectors()
+            }
+            
+            // --- 修正：在這裡綁定事件監聽器 ---
+            if (quickStartButton && !quickStartButton.dataset.listenerAdded) {
+                quickStartButton.addEventListener('click', quickStartGame);
+                quickStartButton.dataset.listenerAdded = 'true'; // 防止重複綁定
+            }
+        }
+
+        window.onload = initApp;
+    </script>
+</body>
+</html>
